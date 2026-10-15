@@ -1,0 +1,34 @@
+{
+  "name": "anonymous_mini_anomaly_db",
+  "purpose": "Software verification only; not used for reported results.",
+  "series_length": 256,
+  "splits": {
+    "train": {
+      "num_samples": 4,
+      "type_counts": {
+        "point": 1,
+        "freq": 1,
+        "trend": 1,
+        "range": 1
+      }
+    },
+    "val": {
+      "num_samples": 4,
+      "type_counts": {
+        "point": 1,
+        "freq": 1,
+        "trend": 1,
+        "range": 1
+      }
+    },
+    "test": {
+      "num_samples": 4,
+      "type_counts": {
+        "point": 1,
+        "freq": 1,
+        "trend": 1,
+        "range": 1
+      }
+    }
+  }
+}

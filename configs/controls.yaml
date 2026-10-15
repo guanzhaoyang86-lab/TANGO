@@ -1,0 +1,26 @@
+# New controlled-comparison protocol. NOT the historical paper's result config.
+epochs: 2
+prompt_fraction: 0.5  # Strict subset: using every row would remove selection.
+learning_rate: 0.000002
+optimizer: adafactor
+num_generations: 6
+max_new_tokens: 2048
+temperature: 0.7
+top_p: 1.0  # Untruncated sampling, matched to the scored temperature.
+reference_penalty_coef: 0.03  # Squared mean-logprob distance, NOT tokenwise KL.
+torch_dtype: bfloat16
+gradient_checkpointing: true
+tau_match: 0.1
+tau_good: 0.5
+residual_sampling_ratios:
+  false_negative: 0.60
+  boundary_error: 0.20
+  false_positive: 0.10
+  correct_abnormal: 0.10
+  correct_normal: 0.00
+reward_weights:
+  point: 0.45
+  event: 0.00
+  iou: 0.40
+  boundary: 0.15
+  type: 0.00

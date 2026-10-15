@@ -1,0 +1,16 @@
+# Direct dependency versions present in the CPU verification environment.
+# Not a complete transitive lock or a claim of a clean-environment reinstall.
+# Tested Python 3.12.9 on Windows; PyTorch build was 2.5.1+cu121, CPU only.
+# Select the proper PyTorch wheel/index for the target GPU. A different
+# CUDA/runtime stack needs its own validation.
+torch==2.5.1
+numpy==2.3.2
+Pillow==11.0.0
+PyYAML==6.0.2
+transformers==4.57.0
+datasets==4.0.0
+accelerate==1.10.1
+peft==0.13.2
+matplotlib==3.10.5
+sentence-transformers==5.0.0
+pytest==8.4.2

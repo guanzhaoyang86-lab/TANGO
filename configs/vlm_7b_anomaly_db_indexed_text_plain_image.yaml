@@ -1,0 +1,61 @@
+# Legacy-format example, kept PREPARE-ONLY for the software fixture.
+# For training use scripts/train_stage.py with explicit full data/model paths.
+seed: 2026
+output_dir: outputs/vlm_qwen25vl_7b_grounding_indexed_run
+
+data:
+  source_root: dataset/anomaly_db_v1
+  split_file_suffix: ""
+  image_subdir: images_plain_768x384
+  include_grounding_records: true
+  include_qa_pairs: false
+  include_indexed_series_text: true
+  indexed_series_precision: 6
+  indexed_series_compact: false
+  balanced_by_type: false
+  series_normalization:
+    enabled: false
+
+model:
+  model_name_or_path: Qwen/Qwen2.5-VL-7B-Instruct
+  trust_remote_code: false
+  processor_kwargs: {}
+  from_pretrained_kwargs:
+    torch_dtype: bfloat16
+
+prompt:
+  system_prompt: >-
+    You are a vision-language anomaly grounding model for time-series plots.
+    Read the input PNG plot and return exactly one JSON object with two keys:
+    evidence and summary. Evidence must be a list whose items contain start,
+    end, type, strength, and direction. Type must be one of point, freq, trend,
+    or range. If no anomaly is detected, return {"evidence": [], "summary":
+    "No anomaly is detected."}. Do not output markdown or extra text.
+  user_prompt: >-
+    Inspect this plain time-series plot and the indexed values. Return one JSON
+    object with structured evidence and one English summary sentence.
+
+training:
+  mode: prepare_only
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 8
+  learning_rate: 0.00001
+  num_train_epochs: 1
+  logging_steps: 10
+  save_steps: 100
+  eval_steps: 100
+  evaluation_strategy: steps
+  save_strategy: steps
+  bf16: true
+  fp16: false
+  gradient_checkpointing: true
+  load_best_model_at_end: false
+  save_total_limit: 2
+  evidence_loss_weight: 0.0
+  summary_semantic_loss_weight: 0.0
+  memory_optimized_loss: false
+  generation_eval_after_train: false
+  generation_eval_splits: [val]
+  generation_eval_task_types: [grounding]
+  generation_eval_max_new_tokens: 2048
