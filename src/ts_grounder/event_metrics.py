@@ -7,6 +7,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from typing import Any
 
+from .schema import parse_grounding_output, parse_json_object
 from .taxonomy import canonicalize_type_name
 
 
@@ -211,8 +212,16 @@ def parse_event_output(
             return EventParseResult(True, projected["evidence"], payload, (), compliant)
         except (ValueError, TypeError, KeyError) as exc:
             return EventParseResult(False, [], None, (str(exc),), False)
+    schema = prediction_schema.strip().lower()
     try:
-        payload = extract_first_json_object(output_text)
+        # Only the explicitly requested historical events format retains JSON
+        # recovery. The evidence contract used by all four controls must match
+        # final evaluation: no prose, trailing text, or partial JSON recovery.
+        payload = (
+            extract_first_json_object(output_text)
+            if schema == "events"
+            else parse_json_object(output_text)
+        )
     except Exception as exc:
         return EventParseResult(False, [], None, (str(exc),))
 
@@ -223,15 +232,16 @@ def parse_event_output(
         return EventParseResult(False, [], payload, (str(exc),))
     if event_key is None or event_key not in payload:
         return EventParseResult(False, [], payload, (f"missing_{event_key or 'events'}",))
+    if event_key == "evidence":
+        try:
+            result = parse_grounding_output(payload, series_length=max_index + 1)
+        except (ValueError, TypeError, KeyError) as exc:
+            return EventParseResult(False, [], payload, (str(exc),))
+        events = [_normalize_event_item(item.to_dict(), event_key="evidence") for item in result.evidence]
+        return EventParseResult(True, events, payload, (), True)
     raw_events = payload.get(event_key)
     if not isinstance(raw_events, list):
         return EventParseResult(False, [], payload, (f"{event_key}_not_list",))
-    if event_key == "evidence":
-        if "summary" not in payload:
-            return EventParseResult(False, [], payload, ("missing_summary",))
-        if not isinstance(payload["summary"], str):
-            return EventParseResult(False, [], payload, ("summary_not_string",))
-
     events: list[dict[str, Any]] = []
     for index, item in enumerate(raw_events):
         prefix = f"{event_key}[{index}]"
@@ -519,9 +529,11 @@ def score_prediction_output(
     prediction_schema: str = DEFAULT_PREDICTION_SCHEMA,
     annotation_scope: str = "full_grounding",
 ) -> dict[str, Any]:
+    if type(series_length) is not int or series_length <= 0:
+        raise ValueError("series_length must be a positive integer.")
     parsed = parse_event_output(
         pred_output,
-        max_index=max_index,
+        max_index=min(max_index, series_length - 1),
         prediction_schema=prediction_schema,
         annotation_scope=annotation_scope,
     )
@@ -633,13 +645,15 @@ def compute_boundary_aware_reward_details(
     prediction_schema: str = DEFAULT_PREDICTION_SCHEMA,
     annotation_scope: str = "full_grounding",
 ) -> dict[str, Any]:
+    if type(series_length) is not int or series_length <= 0:
+        raise ValueError("series_length must be a positive integer.")
     weights = resolve_boundary_reward_weights(reward_weights)
     localization_only = annotation_scope == "localization_only"
     if localization_only and weights["type"] != 0:
         raise ValueError("Localization-only labels cannot support a nonzero type reward")
     parsed = parse_event_output(
         pred_output,
-        max_index=max_index,
+        max_index=min(max_index, series_length - 1),
         prediction_schema=prediction_schema,
         annotation_scope=annotation_scope,
     )

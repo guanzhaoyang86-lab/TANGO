@@ -14,6 +14,7 @@ from .event_metrics import (
     compute_boundary_aware_reward_details as _compute_boundary_aware_reward_details,
     resolve_boundary_reward_weights,
 )
+from .schema import parse_grounding_output, parse_json_object
 from .taxonomy import TYPE_NAMES, canonicalize_type_name
 
 
@@ -72,7 +73,11 @@ def _clip01(value: float) -> float:
 
 
 def parse_model_output(output_text: Any) -> dict[str, Any]:
-    """Extract the first JSON object from a model response."""
+    """Legacy extraction utility; never use it to score model predictions.
+
+    Kept for callers that explicitly need to recover an object from old logs.
+    Active reward paths use the same strict JSON contract as final evaluation.
+    """
 
     if isinstance(output_text, dict):
         return output_text
@@ -94,58 +99,12 @@ def parse_model_output(output_text: Any) -> dict[str, Any]:
 
 
 def schema_errors(pred_json: Any) -> list[str]:
-    errors: list[str] = []
-    if not isinstance(pred_json, dict):
-        return ["root_not_object"]
-
-    if "evidence" not in pred_json:
-        errors.append("missing_evidence")
-        return errors
-    if not isinstance(pred_json["evidence"], list):
-        errors.append("evidence_not_list")
-        return errors
-
-    if "summary" not in pred_json:
-        errors.append("missing_summary")
-    elif not isinstance(pred_json["summary"], str):
-        errors.append("summary_not_string")
-
-    for index, item in enumerate(pred_json["evidence"]):
-        prefix = f"evidence[{index}]"
-        if not isinstance(item, dict):
-            errors.append(f"{prefix}_not_object")
-            continue
-
-        for key in ("start", "end", "type", "strength", "direction"):
-            if key not in item:
-                errors.append(f"{prefix}_missing_{key}")
-
-        start = _coerce_int(item.get("start"))
-        end = _coerce_int(item.get("end"))
-        if start is None:
-            errors.append(f"{prefix}_start_not_int")
-        if end is None:
-            errors.append(f"{prefix}_end_not_int")
-        if start is not None and end is not None and start > end:
-            errors.append(f"{prefix}_start_after_end")
-
-        type_name = item.get("type")
-        if not isinstance(type_name, str):
-            errors.append(f"{prefix}_type_not_string")
-        elif canonicalize_type_name(type_name) not in ALLOWED_TYPES:
-            errors.append(f"{prefix}_unknown_type")
-
-        for key in ("strength", "direction"):
-            if key in item and not isinstance(item[key], str):
-                errors.append(f"{prefix}_{key}_not_string")
-
-        if "confidence" in item:
-            confidence = _coerce_float(item.get("confidence"))
-            if confidence is None:
-                errors.append(f"{prefix}_confidence_not_number")
-            elif confidence < 0.0 or confidence > 1.0:
-                errors.append(f"{prefix}_confidence_out_of_range")
-    return errors
+    """Compatibility validator backed by the shared full-grounding contract."""
+    try:
+        parse_grounding_output(pred_json)
+    except (ValueError, TypeError) as exc:
+        return [str(exc)]
+    return []
 
 
 def validate_schema(pred_json: Any) -> bool:
@@ -486,7 +445,15 @@ def _clip_intervals_to_seq_len(
 
 
 def _length_penalty(output_text: Any) -> float:
-    text = json.dumps(output_text, ensure_ascii=False) if not isinstance(output_text, str) else output_text
+    if isinstance(output_text, str):
+        text = output_text
+    else:
+        try:
+            text = json.dumps(output_text, ensure_ascii=False)
+        except (TypeError, ValueError):
+            # Invalid programmatic actions still need to receive the invalid
+            # reward, rather than failing while constructing diagnostic fields.
+            text = str(output_text)
     token_estimate = max(1, len(text.split()))
     return min(2.0, max(0.0, (token_estimate - 120) / 120))
 
@@ -499,15 +466,34 @@ def compute_grounder_reward_details(
     reward_weights: dict[str, float] | None = None,
     annotation_scope: str = "full_grounding",
 ) -> dict[str, Any]:
+    if annotation_scope not in {"localization_only", "full_grounding", "full_semantic"}:
+        raise ValueError(f"Unknown annotation scope: {annotation_scope}")
+    if type(seq_len) is not int or seq_len <= 0:
+        raise ValueError("seq_len must be a positive integer.")
     resolved_reward_weights = resolve_reward_weights(reward_weights)
+    pred_json: dict[str, Any] | None = None
+    json_valid = False
     try:
-        pred_json = parse_model_output(pred_output)
-    except Exception as exc:
+        pred_json = parse_json_object(pred_output)
+        json_valid = True
+        if annotation_scope == "localization_only":
+            from .supervision import validate_localization_payload
+
+            # Metric projection can evaluate Stage-2 full-schema predictions,
+            # but reward must require the requested localization-only schema.
+            validate_localization_payload(pred_json, seq_len)
+        else:
+            parse_grounding_output(pred_json, series_length=seq_len)
+    except (ValueError, TypeError) as exc:
+        # Diagnostics never salvage an invalid action into a positive reward.
+        # In particular, do not clip out-of-window predictions into correct ones.
+        raw_intervals = extract_intervals(pred_json) if pred_json is not None else []
+        _, clipped_count, invalid_order_count = _clip_intervals_to_seq_len(raw_intervals, seq_len)
         return {
             "reward": -1.0,
             "reward_weights": resolved_reward_weights,
             "reward_terms": {},
-            "json_valid": 0.0,
+            "json_valid": float(json_valid),
             "schema_valid": 0.0,
             "schema_reward": 0.0,
             "event_precision": 0.0,
@@ -522,25 +508,14 @@ def compute_grounder_reward_details(
             "pred_intervals": [],
             "gt_intervals": [],
             "matches": [],
+            "clipped_interval_count": clipped_count,
+            "invalid_order_count": invalid_order_count,
         }
 
-    if annotation_scope == "localization_only":
-        from .supervision import validate_localization_payload
-        try:
-            # Unlike permissive metric projection, training rewards require the
-            # requested localization schema, not invented semantic fields.
-            exact_payload = json.loads(pred_output) if isinstance(pred_output, str) else pred_output
-            validate_localization_payload(exact_payload, seq_len)
-            errors = []
-        except (ValueError, TypeError) as exc:
-            errors = [str(exc)]
-    elif annotation_scope in {"full_grounding", "full_semantic"}:
-        errors = schema_errors(pred_json)
-    else:
-        raise ValueError(f"Unknown annotation scope: {annotation_scope}")
-    schema_valid = not errors
-    evidence_usable = isinstance(pred_json.get("evidence"), list)
-    schema_reward = 1.0 if schema_valid else 0.0
+    errors: list[str] = []
+    schema_valid = True
+    evidence_usable = True
+    schema_reward = 1.0
 
     raw_pred_intervals = extract_intervals(pred_json) if evidence_usable else []
     pred_intervals, clipped_count, invalid_order_count = _clip_intervals_to_seq_len(raw_pred_intervals, seq_len)
@@ -599,9 +574,6 @@ def compute_grounder_reward_details(
         float(resolved_reward_weights[key]) * float(reward_terms[key])
         for key in ACTIVE_REWARD_TERMS
     ), 12)
-    if annotation_scope == "localization_only" and not schema_valid:
-        reward = -1.0
-
     return {
         "reward": float(reward),
         "reward_weights": resolved_reward_weights,

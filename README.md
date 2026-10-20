@@ -10,6 +10,31 @@ CPU tests include actual randomly initialized tiny Qwen2.5-VL models; those test
 do not establish pretrained-model accuracy, GPU compatibility, or RAGO's benefit.
 See [verification scope](VERIFICATION.md).
 
+## Correctness update: 2026-10-20
+
+Full-grounding reward, residual mining and final evaluation now share one strict
+output contract. Prose-wrapped JSON, trailing text, duplicate keys, unknown anomaly
+types, empty required semantic fields and invalid boundaries cannot receive a
+positive training reward while failing final parsing. The alternate legacy reward
+function also uses this validator. Valid-output reward formulas are unchanged;
+the separate historical `events`-schema compatibility parser is not used by the
+four-way controlled launcher.
+
+Checkpoint identity now includes `chat_template.jinja`, named templates under
+`additional_chat_templates/` and `chat_templates/`, and relevant tokenizer assets.
+Changing the actual chat template changes the fingerprint. Symlink/junction assets
+are rejected, while optimizer state and unrelated nested training checkpoints
+remain outside the inference identity.
+
+**Migration:** start a fresh experiment directory and rerun prepare, mine,
+schedule, train and evaluate with this revision. The `grounding-output-v2`
+contract is recorded in experiment identities, mining outputs, prompt schedules,
+completion receipts and RL resume signatures; unversioned/older artifacts are
+rejected. Do not manually change their version or digest to bypass the check.
+Existing source splits and valid Stage-2 weights need not be regenerated merely
+for these fixes, but their new identity and downstream experiment artifacts must
+be regenerated. No source data or old run is deleted.
+
 ## Four controlled variants
 
 | ID | Method | Stage-3 data | Stage-3 update | Main comparison |

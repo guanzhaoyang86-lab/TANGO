@@ -3,12 +3,14 @@ from __future__ import annotations
 import copy
 import json
 from pathlib import Path
+import shutil
 import sys
 import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from ts_grounder.control_protocol import (build_prompt_schedules, fingerprint_checkpoint,
                                          index_train_records, load_prompt_schedule)
+from ts_grounder.schema import GROUNDING_CONTRACT_VERSION
 
 
 def _reject(function, *args, **kwargs):
@@ -33,7 +35,8 @@ def _fixture(root: Path):
     for i, record in enumerate(residual):
         record["error_type"] = classes[i % len(classes)]
         record["residual_mining"] = {"checkpoint_fingerprint": "a" * 64,
-                                     "source_split": "train", "input_sha256": "b" * 64}
+                                     "source_split": "train", "input_sha256": "b" * 64,
+                                     "grounding_contract_version": GROUNDING_CONTRACT_VERSION}
     return train, residual
 
 
@@ -97,6 +100,21 @@ def test_reject_residual_predictions_from_different_checkpoint():
         _reject(_build, train, residual)
 
 
+def test_reject_residual_pool_and_schedule_from_old_grounding_contract():
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        train, residual = _fixture(root)
+        for old_version in (None, "grounding-output-v1"):
+            old_residual = copy.deepcopy(residual)
+            old_residual[0]["residual_mining"]["grounding_contract_version"] = old_version
+            _reject(_build, train, old_residual)
+            schedule = _build(train, residual)[0]
+            schedule["grounding_contract_version"] = old_version
+            path = root / "old_schedule.json"
+            path.write_text(json.dumps(schedule), encoding="utf-8")
+            _reject(load_prompt_schedule, path, train)
+
+
 def test_schedule_rejects_mutation_duplicate_unknown_id_and_budget():
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
@@ -149,3 +167,118 @@ def test_checkpoint_fingerprint_content_identity_changes_and_adapter_rejection()
         assert baseline == fingerprint_checkpoint(root / "one")
         (root / "one" / "adapter_config.json").write_text("{}", encoding="utf-8")
         _reject(fingerprint_checkpoint, root / "one")
+
+
+def _checkpoint_fixture(root: Path) -> Path:
+    checkpoint = root / "checkpoint"
+    checkpoint.mkdir()
+    (checkpoint / "config.json").write_text('{"model_type":"test"}', encoding="utf-8")
+    (checkpoint / "model.safetensors").write_bytes(b"test-only-weight-bytes")
+    (checkpoint / "tokenizer.json").write_text("{}", encoding="utf-8")
+    return checkpoint
+
+
+def test_checkpoint_templates_add_modify_rename_remove_and_copy_identity():
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        checkpoint = _checkpoint_fixture(root)
+        empty = fingerprint_checkpoint(checkpoint)
+        template = checkpoint / "chat_template.jinja"
+        template.write_text("original {{ messages }}", encoding="utf-8")
+        baseline = fingerprint_checkpoint(checkpoint)
+        assert baseline != empty
+        template.write_text("modified {{ messages }}", encoding="utf-8")
+        assert fingerprint_checkpoint(checkpoint) != baseline
+        template.write_text("original {{ messages }}", encoding="utf-8")
+        assert fingerprint_checkpoint(checkpoint) == baseline
+
+        named_dir = checkpoint / "chat_templates"
+        named_dir.mkdir()
+        named = named_dir / "tool_use.jinja"
+        named.write_text("tool {{ messages }}", encoding="utf-8")
+        with_named = fingerprint_checkpoint(checkpoint)
+        assert with_named != baseline
+        renamed = named.with_name("custom.jinja")
+        named.rename(renamed)
+        assert fingerprint_checkpoint(checkpoint) != with_named
+        renamed.rename(named)
+        assert fingerprint_checkpoint(checkpoint) == with_named
+        copied = root / "relocated"
+        shutil.copytree(checkpoint, copied)
+        assert fingerprint_checkpoint(copied) == with_named
+        named.unlink()
+        assert fingerprint_checkpoint(checkpoint) == baseline
+        template.unlink()
+        assert fingerprint_checkpoint(checkpoint) == empty
+
+
+def test_checkpoint_fingerprint_processor_files_and_bounded_traversal():
+    with tempfile.TemporaryDirectory() as directory:
+        checkpoint = _checkpoint_fixture(Path(directory))
+        for name in ("preprocessor_config.json", "processor_config.json",
+                     "video_preprocessor_config.json", "generation_config.json", "tokenizer_config.json"):
+            before = fingerprint_checkpoint(checkpoint)
+            (checkpoint / name).write_text('{"setting":1}', encoding="utf-8")
+            after = fingerprint_checkpoint(checkpoint)
+            assert after != before
+            (checkpoint / name).write_text('{"setting":2}', encoding="utf-8")
+            assert fingerprint_checkpoint(checkpoint) != after
+        baseline = fingerprint_checkpoint(checkpoint)
+        # Training checkpoints can contain huge weights and must not be scanned.
+        historical = checkpoint / "checkpoint-100"
+        historical.mkdir()
+        (historical / "model.safetensors").write_bytes(b"unrelated-history")
+        for name in ("optimizer.bin", "training_args.bin", "trainer_state.json"):
+            (checkpoint / name).write_text("training-only-state", encoding="utf-8")
+        assert fingerprint_checkpoint(checkpoint) == baseline
+
+
+def test_checkpoint_fingerprint_rejects_reparse_points_in_nested_assets(monkeypatch):
+    import stat
+    from types import SimpleNamespace
+
+    with tempfile.TemporaryDirectory() as directory:
+        checkpoint = _checkpoint_fixture(Path(directory))
+        templates = checkpoint / "chat_templates"
+        templates.mkdir()
+        template = templates / "tool_use.jinja"
+        template.write_text("{{ messages }}", encoding="utf-8")
+        nested = templates / "nested"
+        nested.mkdir()
+        original_lstat = Path.lstat
+
+        for linked_path in (checkpoint, templates, nested, template):
+            def fake_lstat(path):
+                if path == linked_path:
+                    result = original_lstat(path)
+                    return SimpleNamespace(
+                        st_mode=result.st_mode,
+                        st_file_attributes=getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400),
+                    )
+                return original_lstat(path)
+
+            monkeypatch.setattr(Path, "lstat", fake_lstat)
+            _reject(fingerprint_checkpoint, checkpoint)
+
+
+def test_checkpoint_fingerprint_rejects_symlink_template_and_directory(tmp_path):
+    import pytest
+
+    checkpoint = _checkpoint_fixture(tmp_path)
+    external = tmp_path / "external.jinja"
+    external.write_text("{{ messages }}", encoding="utf-8")
+    link = checkpoint / "chat_template.jinja"
+    try:
+        link.symlink_to(external)
+    except (OSError, NotImplementedError):
+        pytest.skip("This OS/account does not permit creating symbolic links")
+    _reject(fingerprint_checkpoint, checkpoint)
+    link.unlink()
+    templates = checkpoint / "chat_templates"
+    templates.mkdir()
+    (templates / "tool_use.jinja").symlink_to(external)
+    _reject(fingerprint_checkpoint, checkpoint)
+    (templates / "tool_use.jinja").unlink()
+    templates.rmdir()
+    templates.symlink_to(tmp_path, target_is_directory=True)
+    _reject(fingerprint_checkpoint, checkpoint)

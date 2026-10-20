@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT / "src"))
 SPEC = importlib.util.spec_from_file_location("tango_residual_miner_tests", ROOT / "scripts/build_residual_pool.py")
 miner = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(miner)
+from ts_grounder.schema import GROUNDING_CONTRACT_VERSION
 
 
 def _raises(exception, function, *args, **kwargs):
@@ -98,6 +99,8 @@ def test_mining_preserves_exact_full_and_localization_targets():
             assert result["raw_sample"] == original["raw_sample"]
             assert result["error_type"] == "correct_abnormal"
             assert result["residual_mining"]["source_split"] == "train"
+            assert result["residual_mining"]["grounding_contract_version"] == GROUNDING_CONTRACT_VERSION
+            assert summary["grounding_contract_version"] == GROUNDING_CONTRACT_VERSION
             assert summary["checkpoint_fingerprint"] == "abc"
             assert summary["residual_sha256"] == miner._sha256_file(root / "pool.jsonl")
             if localization:
@@ -135,3 +138,21 @@ def test_checkpoint_fingerprint_rejects_unpinned_hub_reference():
     provenance = miner.checkpoint_provenance("some/model", "a" * 40)
     assert provenance["kind"] == "pinned_hub"
     assert len(provenance["sha256"]) == 64
+
+
+def test_full_grounding_miner_does_not_mark_prose_wrapped_json_correct():
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        record = _prepared_record(root, False)
+        (root / "train.jsonl").write_text(json.dumps(record) + "\n", encoding="utf-8")
+        response = "Here is the result: " + record["assistant_text"]
+        with patch.object(miner, "checkpoint_provenance", return_value={"sha256": "abc"}), \
+             patch.object(miner, "_generate_outputs", return_value=[response]):
+            summary = miner.build_residual_pool(_arguments(root))
+        result = miner.load_jsonl(root / "pool.jsonl")[0]
+        assert result["error_type"] == "invalid_json"
+        assert result["json_valid"] is False and result["schema_compliant"] is False
+        assert result["sft_pred_evidence"] == []
+        assert result["target"] == record["target"]
+        assert result["residual_mining"]["grounding_contract_version"] == GROUNDING_CONTRACT_VERSION
+        assert summary["schema_compliance_rate"] == 0.0

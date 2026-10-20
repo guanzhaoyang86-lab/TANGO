@@ -33,6 +33,7 @@ if __package__ in (None, ""):
     from ts_grounder.vlm_prompting import build_chat_messages
     from ts_grounder.vlm_training import _clean_generated_text, _generate_predictions_for_records
     from ts_grounder.utils import load_yaml
+    from ts_grounder.schema import GROUNDING_CONTRACT_VERSION
     from ts_grounder.supervision import annotation_scope, validate_generation_budget, validate_prepared_record
 else:
     from .event_metrics import (
@@ -57,6 +58,7 @@ else:
     from .vlm_prompting import build_chat_messages
     from .vlm_training import _clean_generated_text, _generate_predictions_for_records
     from .utils import load_yaml
+    from .schema import GROUNDING_CONTRACT_VERSION
     from .supervision import annotation_scope, validate_generation_budget, validate_prepared_record
 
 
@@ -566,6 +568,7 @@ def _resume_signature(args, train_file: str | Path) -> dict[str, Any]:
               "reward_point_weight", "reward_event_weight", "reward_iou_weight", "reward_boundary_weight", "reward_type_weight")
     return {
         "implementation": "exact-actions-sequence-mean-v1",
+        "grounding_contract_version": GROUNDING_CONTRACT_VERSION,
         "settings": {name: getattr(args, name) for name in fields},
         "train_sha256": _sha256_file(train_file),
         "schedule_sha256": _sha256_file(args.prompt_schedule_file) if args.prompt_schedule_file else None,

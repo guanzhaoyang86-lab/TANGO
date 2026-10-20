@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .schema import GroundingResult
+from .schema import GroundingResult, parse_grounding_output
 from .supervision import annotation_scope, project_localization_prediction, validate_localization_payload
 from .taxonomy import TYPE_NAMES, canonicalize_type_name
 from .utils import dump_json
@@ -32,17 +32,7 @@ SEMANTIC_METRICS = {"summary_exact_match", "type_accuracy", "strength_accuracy",
 
 
 def parse_generated_result(text: str, *, series_length: int | None = None) -> GroundingResult:
-    payload = json.loads(text.strip())
-    result = GroundingResult.from_dict(payload)
-    if series_length is not None:
-        if series_length <= 0:
-            raise ValueError("series_length must be positive.")
-        for item in result.evidence:
-            if item.end >= series_length:
-                raise ValueError(
-                    f"Evidence interval [{item.start}, {item.end}] exceeds series length {series_length}."
-                )
-    return result
+    return parse_grounding_output(text, series_length=series_length)
 
 
 def _interval_to_mask(items: list[dict[str, Any]], series_length: int) -> list[int]:

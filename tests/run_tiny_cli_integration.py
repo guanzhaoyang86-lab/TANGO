@@ -28,6 +28,8 @@ from test_tiny_vlm_integration import _tiny_qwen_components
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--work-dir", type=Path, required=True)
+    parser.add_argument("--annotation-scope", choices=["localization_only", "full_grounding"],
+                        default="localization_only", help="Exercise either real-data localization or synthetic full-schema adapters")
     args = parser.parse_args()
     work = args.work_dir.resolve()
     if work.exists() and any(work.iterdir()):
@@ -52,7 +54,7 @@ def main():
     model.save_pretrained(checkpoint)
     processor.save_pretrained(checkpoint)
 
-    source = work / "fresh_generated_localization_fixture"
+    source = work / "fresh_generated_software_fixture"
     source.mkdir()
     for split, count in (("train", 8), ("val", 2), ("test", 2)):
         samples = []
@@ -67,9 +69,14 @@ def main():
             maximum = max(series) + 0.1
             draw.line([(2 + 51 * j / 255, 53 - 50 * v / maximum) for j, v in enumerate(series)], fill="blue")
             image.save(source / f"{name}.png")
-            samples.append({"sample_id": name, "annotation_scope": "localization_only", "semantic_label_available": False,
+            events = [{"start": 10, "end": 12}] if anomalous else []
+            if args.annotation_scope == "full_grounding":
+                for event in events:
+                    event.update(type="point", verbal_tags={"strength": "strong", "direction": "upward"})
+            samples.append({"sample_id": name, "annotation_scope": args.annotation_scope,
+                "semantic_label_available": args.annotation_scope == "full_grounding",
                 "series": series, "point_labels": [int(anomalous and 10 <= j <= 12) for j in range(256)],
-                "events": [{"start": 10, "end": 12}] if anomalous else [], "image_path": f"{name}.png",
+                "events": events, "image_path": f"{name}.png",
                 "context": {"series_length": 256, "source_dataset": "NEWLY_GENERATED_INTEGRATION_FIXTURE",
                             "materialized_subset_split": split}})
         (source / f"{split}.json").write_text(json.dumps(samples), encoding="utf-8")
@@ -97,7 +104,8 @@ def main():
     receipt = {"status": "passed", "utc": datetime.now(timezone.utc).isoformat(),
                "wall_seconds": time.perf_counter() - started, "variants": ["A", "D", "F", "G"],
                "framework": "actual offline randomly initialized tiny Qwen2.5-VL, CPU",
-               "fixture": "newly generated localization records; no released benchmark data",
+               "fixture": "newly generated software records; no released benchmark data",
+               "annotation_scope": args.annotation_scope,
                "research_accuracy_or_gpu_claim": False,
                "generation_fixture": "EOS-biased to bound the launch smoke; no accuracy assertion"}
     (work / "integration_receipt.json").write_text(json.dumps(receipt, indent=2), encoding="utf-8")

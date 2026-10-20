@@ -11,7 +11,10 @@ import json
 import math
 from pathlib import Path
 import random
+import stat
 from typing import Any
+
+from .schema import GROUNDING_CONTRACT_VERSION
 
 
 def file_sha256(path: str | Path) -> str:
@@ -28,8 +31,27 @@ def json_sha256(value: Any) -> str:
 
 
 def fingerprint_checkpoint(path: str | Path) -> str:
-    """Content identity of a local full checkpoint, independent of its location."""
-    root = Path(path).resolve()
+    """Location-independent identity of materialized HF inference assets.
+
+    Include model/tokenizer/processor files and both Hugging Face chat-template
+    layouts: chat_template.jinja and additional_chat_templates/<name>.jinja
+    (also the chat_templates/ layout). Only those dedicated template subtrees
+    are traversed; nested training checkpoints and optimizer state are not
+    inference inputs and must not enter the identity.
+    """
+    def reject_link(item: Path) -> None:
+        # is_symlink() does not cover Windows junctions. Refuse all reparse
+        # points so the inventory cannot silently follow an external target.
+        attributes = getattr(item.lstat(), "st_file_attributes", 0)
+        if item.is_symlink() or attributes & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400):
+            raise ValueError("Use a materialized local checkpoint, not symlinked files or junctions")
+
+    unresolved = Path(path).absolute()
+    if not unresolved.is_dir():
+        raise ValueError("A local full Stage-2 checkpoint with config.json is required")
+    for component in (unresolved, *unresolved.parents):
+        reject_link(component)
+    root = unresolved.resolve()
     if not root.is_dir() or not (root / "config.json").is_file():
         raise ValueError("A local full Stage-2 checkpoint with config.json is required")
     if (root / "adapter_config.json").exists():
@@ -40,13 +62,32 @@ def fingerprint_checkpoint(path: str | Path) -> str:
     excluded = {"optimizer.bin", "optimizer.pt", "training_args.bin", "trainer_state.json",
                 "scheduler.pt", "rng_state.pth", "all_results.json", "train_results.json", "eval_results.json"}
     inventory = {}
+
+    def add_file(item: Path) -> None:
+        relative = item.relative_to(root).as_posix()
+        inventory[relative] = {"bytes": item.stat().st_size, "sha256": file_sha256(item)}
+
+    def add_templates(directory: Path) -> None:
+        for item in sorted(directory.iterdir()):
+            reject_link(item)
+            if item.is_dir():
+                add_templates(item)
+            elif item.is_file():
+                add_file(item)
+            else:
+                raise ValueError(f"Checkpoint template asset is not a regular file: {item.name}")
+
     for item in sorted(root.iterdir()):
-        if item.is_symlink():
-            raise ValueError("Use a materialized local checkpoint, not symlinked files")
+        reject_link(item)
+        if item.name in {"chat_templates", "additional_chat_templates"}:
+            if not item.is_dir():
+                raise ValueError(f"Checkpoint {item.name} must be a directory")
+            add_templates(item)
         if item.is_file() and item.name not in excluded and item.suffix in {
-            ".json", ".model", ".txt", ".tiktoken", ".safetensors", ".bin"
+            ".json", ".model", ".txt", ".tiktoken", ".safetensors", ".bin",
+            ".jinja", ".spm", ".vocab", ".merges",
         }:
-            inventory[item.name] = {"bytes": item.stat().st_size, "sha256": file_sha256(item)}
+            add_file(item)
     return json_sha256(inventory)
 
 
@@ -114,6 +155,8 @@ def build_prompt_schedules(
         if record.get("error_type") not in ERROR_TYPES:
             raise ValueError(f"Unknown residual class: {ident}")
         provenance = record.get("residual_mining", {})
+        if provenance.get("grounding_contract_version") != GROUNDING_CONTRACT_VERSION:
+            raise ValueError("Residual pool uses an old grounding-output contract; re-mine it with the current code")
         if (provenance.get("checkpoint_fingerprint") != checkpoint_fingerprint
                 or provenance.get("source_split") != "train"):
             raise ValueError(f"Residual checkpoint/split provenance mismatch: {ident}")
@@ -143,6 +186,7 @@ def build_prompt_schedules(
         residual_epochs.append([record_id(record) for record in selected])
         random_epochs.append(random.Random(seed + epoch).sample(source_ids, prompts_per_epoch))
     common = {"schema_version": 1, "seed": seed, "num_epochs": epochs,
+              "grounding_contract_version": GROUNDING_CONTRACT_VERSION,
               "prompts_per_epoch": prompts_per_epoch, "total_prompt_exposures": epochs * prompts_per_epoch,
               "stage2_checkpoint_fingerprint": checkpoint_fingerprint,
               "mining_input_sha256": next(iter(mining_inputs)),
@@ -167,6 +211,8 @@ def load_prompt_schedule(path: str | Path, records: list[dict[str, Any]]) -> lis
     indexed = index_train_records(records)
     if payload.get("schema_version") != 1 or payload.get("selection") not in {"residual", "random"}:
         raise ValueError("Unsupported prompt schedule")
+    if payload.get("grounding_contract_version") != GROUNDING_CONTRACT_VERSION:
+        raise ValueError("Schedule uses an old grounding-output contract; re-mine and rebuild the schedule")
     fingerprints = {ident: record_fingerprint(record) for ident, record in indexed.items()}
     if payload.get("record_fingerprints") != fingerprints or payload.get("train_population_sha256") != json_sha256(fingerprints):
         raise ValueError("Schedule was built from different model inputs, targets, IDs, or supervision")

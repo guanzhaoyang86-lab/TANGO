@@ -124,8 +124,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 13486,
-      "sha256": "0645e51174d2afd8d27740e589417ef6dae695a36ec266883bb686b07354ab13"
+      "bytes": 15001,
+      "sha256": "30b1ef9bf586a6cd34896a586d3d08aed5c7087414708c7c2d699e489450b863"
     },
     {
       "path": "requirements-dev.txt",
@@ -154,8 +154,8 @@
     },
     {
       "path": "scripts/build_residual_pool.py",
-      "bytes": 28139,
-      "sha256": "ee8eb1e565c1fecfdfa58fd588bec3fe667688076bc0ad97c30a16dbfe3eb6aa"
+      "bytes": 28352,
+      "sha256": "67a7c6605bcbf84320808ab0655272505858baf4f1eb8e14420fba5c69dc3c64"
     },
     {
       "path": "scripts/eval_vlm_grounder.py",
@@ -174,8 +174,8 @@
     },
     {
       "path": "scripts/run_ablation.py",
-      "bytes": 22041,
-      "sha256": "fa244b37184be177f83cfd847fa8895bf5743485ca6ef07922f1db6e2a3edf0a"
+      "bytes": 22652,
+      "sha256": "028b5b6d636d3be91adabb3779a40a80a0c59c7fcb58038d1e9ca6977ebbce50"
     },
     {
       "path": "scripts/run_D.sh",
@@ -234,28 +234,28 @@
     },
     {
       "path": "src/ts_grounder/control_protocol.py",
-      "bytes": 10731,
-      "sha256": "4909964cb6894288944fbfe8a4c6ad4a7629298f91b58aa6f342d91306c15cd9"
+      "bytes": 12997,
+      "sha256": "0f30ed9fdfb3abcdd9b39f8ee6f875cd64586727695ed9bae0103002ec91edf2"
     },
     {
       "path": "src/ts_grounder/event_metrics.py",
-      "bytes": 35385,
-      "sha256": "bba7cf5d6738a9ae6ef62f96cb71ef017a7e9b1821b3f894dc0e3347a6c85c91"
+      "bytes": 36290,
+      "sha256": "03d18779303e64ead15be15398fa4cf37012f921787368d439e8289b96a9298c"
     },
     {
       "path": "src/ts_grounder/rl_reward.py",
-      "bytes": 23840,
-      "sha256": "b49d7b9819253f1d096e46f519a6930534d843d72e44b133b3587088457ae908"
+      "bytes": 22975,
+      "sha256": "c5e70ee1388ee3b9f18c9884fa205db2a1c0a778f7dba41666237fb4a6630b01"
     },
     {
       "path": "src/ts_grounder/rl_train_grpo.py",
-      "bytes": 53332,
-      "sha256": "f06d103f28f8fb87c024a133996ec651f2418d7270b12d1f863dacfd99126556"
+      "bytes": 53511,
+      "sha256": "5cafb2f698f2b7cc73bc9d69244b99fcd678171a8107ac8a29aa1596b991c853"
     },
     {
       "path": "src/ts_grounder/schema.py",
-      "bytes": 3519,
-      "sha256": "794130fa7b0f35d820ffbf7cc5c485551183e451ee697377a2ff0174537be7a4"
+      "bytes": 5799,
+      "sha256": "a1d65eb2227266657c623f0924084b43f1d18b369a7d0e331cce3f5dde36a1c9"
     },
     {
       "path": "src/ts_grounder/series_normalization.py",
@@ -284,8 +284,8 @@
     },
     {
       "path": "src/ts_grounder/vlm_eval.py",
-      "bytes": 18089,
-      "sha256": "3096d6e249e329cbde64e2bded3f5ac57b11ac1ea63dac33c0201be287e80943"
+      "bytes": 17710,
+      "sha256": "53561d91119027e591015cf60402925d872a0318c04191c4a8acf3dcd8ea9e03"
     },
     {
       "path": "src/ts_grounder/vlm_prompting.py",
@@ -299,8 +299,8 @@
     },
     {
       "path": "tests/run_tiny_cli_integration.py",
-      "bytes": 5420,
-      "sha256": "7d8bdafe48b6d4cf1ecc8fb2666e41dbf67e52374b55eb04bd7c002f9ffd5404"
+      "bytes": 5982,
+      "sha256": "8c8ce1c75164a80778e2f5b9f41eaf63e5e03fe490cffc21b314eba4b404e5a0"
     },
     {
       "path": "tests/test_ablation_runner.py",
@@ -308,9 +308,14 @@
       "sha256": "6a4c7b01b67ed2fc1be9427b71efb490c381c165f915be872ead088358fa2344"
     },
     {
+      "path": "tests/test_checkpoint_processor_identity.py",
+      "bytes": 2579,
+      "sha256": "b124d8895946ae482889bc00eb7b3c913e974ee4443d618efe558b6705c48ec1"
+    },
+    {
       "path": "tests/test_control_protocol.py",
-      "bytes": 7074,
-      "sha256": "7dbc445c564e57a7e4d1601aae01e903f885f036061ca2d49e415fef288dbb5a"
+      "bytes": 13146,
+      "sha256": "ea4a670427ee2f38c333623e84fa917100d76fe61a6cc1d08b9fc8c4bf1a11c3"
     },
     {
       "path": "tests/test_event_metrics.py",
@@ -318,19 +323,24 @@
       "sha256": "51eb1a17b5a62778cb6354b2765fc5d5b733e007c738e7ade31099fb382811d2"
     },
     {
+      "path": "tests/test_grounding_contract.py",
+      "bytes": 9315,
+      "sha256": "361d4fd6fb1bda66b7c9e5e8ae81d2cc4e88bae43a343a1c8765fc29dc04e243"
+    },
+    {
       "path": "tests/test_residual_mining.py",
-      "bytes": 7937,
-      "sha256": "685d400e1c355e1f6cf0f53098ed672cfd08d0e6a5cbff50c6a005da41790c74"
+      "bytes": 9244,
+      "sha256": "70b13e3d51176c14e81a3a68c1a4ba69d26a74b2dc6fecbf2500e108ebdb7ede"
     },
     {
       "path": "tests/test_rl_orchestration.py",
-      "bytes": 5902,
-      "sha256": "d499f5482104493366ad3e8356899a2f3c42d9aaff53400d7351720067cddf94"
+      "bytes": 6826,
+      "sha256": "2ab8368a5ab3a12fcd3fd48800663be37be6343d6b70450e8fd7d6d2815e0cf8"
     },
     {
       "path": "tests/test_rl_reward.py",
-      "bytes": 6079,
-      "sha256": "6a997db56fc97214d7ab385ecaed9c5292a99e11197849035631cff6453380c7"
+      "bytes": 10624,
+      "sha256": "1bd19c9ed68c5576b7134248f06f8e97908bc4a25c5521c39e2aa2b480a0d625"
     },
     {
       "path": "tests/test_rl_training_correctness.py",
@@ -344,8 +354,8 @@
     },
     {
       "path": "tests/test_supervision.py",
-      "bytes": 18363,
-      "sha256": "c9d477d19cce9f501207a2390e714aaefcdc2dad91cb53ede7bc4fdfb6b443ef"
+      "bytes": 18487,
+      "sha256": "baa1cee73ea6fcf530799a631bd69c0866a2ed8d6ffd291d9406dee0c8cf9764"
     },
     {
       "path": "tests/test_tiny_vlm_integration.py",
@@ -364,8 +374,8 @@
     },
     {
       "path": "VERIFICATION.md",
-      "bytes": 4145,
-      "sha256": "75d1014e98a62e4b4b56663514477cf5366e26229685bb550d3a33f9786d4c43"
+      "bytes": 4995,
+      "sha256": "50f8a9acb73f2d9b8686c2ff5c89bc79925fb6215f57032d74b51ad9cbc73968"
     }
   ]
 }

@@ -1,20 +1,29 @@
 # Verification scope
 
-Verified on 2026-10-15. This is a software-verification record, not an experimental
+Code reverified on 2026-10-20; the full-data adapter audit below was performed on
+2026-10-15. This is a software-verification record, not an experimental
 results table or a guarantee that every configuration is free of defects.
 
 ## Completed checks
 
 | Check | Result | What it establishes |
 |---|---|---|
-| Default automated suite | 103 passed | Unit, protocol and bounded integration contracts |
-| Python parsing | 38 files passed | Syntax for the released Python sources |
+| Default automated suite | 219 passed, 1 skipped | Unit, protocol and bounded integration contracts |
+| Python parsing | 40 files passed | Syntax for the released Python sources |
 | Bash parsing | 6 launchers passed | Shell syntax; not a Linux GPU run |
 | PowerShell launcher | Syntax and plan invocation passed | Windows argument forwarding |
 | Miniature prepare-only smoke | Passed | Data preparation and parser consistency, no model accuracy |
 | Current full-data adapter compatibility | 29,753 records passed | Input paths, target scopes, inclusive boundaries and label contracts |
 | Tiny real Qwen2.5-VL | Passed offline on CPU | Real processor/model forward, gradients, updates, save and reload |
-| Four-way CLI integration | A/D/F/G passed, about 60.52 seconds | Prepare, mine, schedule, train D/F/G, save, evaluate A/D/F/G |
+| Four-way CLI integration, localization-only | A/D/F/G passed, about 55.90 seconds | Prepare, mine, schedule, train D/F/G, save, evaluate A/D/F/G |
+| Four-way CLI integration, full-grounding | A/D/F/G passed, about 55.91 seconds | Same real tiny-model pipeline with synthetic full-schema targets |
+
+The skipped test requires creating actual symbolic links, which the Windows
+verification account is not permitted to do. Mocked Windows reparse-point guards
+passed. Real Qwen processor save/load tests (not mocks) verify default and named
+chat-template mutation detection. New parser tests cover both reward entry points,
+the residual miner and the final evaluator, including the previously confirmed
+prose-wrapped-JSON discrepancy. Old mining/schedule contract versions are rejected.
 
 The adapter check covered 2,693 TSB windows and 17,060 KPI windows with
 localization-only targets, and 10,000 full-semantic synthetic windows. It did not
@@ -31,7 +40,7 @@ tokens, visual-token probability normalization, reward parsing, optimizer update
 and deterministic RL checkpoint resume. An orchestration test substitutes the
 training/prediction subprocesses; it is not represented as a model experiment.
 
-The additional full CLI smoke uses a fresh eight-training/two-validation/two-test
+Each additional full CLI smoke uses a fresh eight-training/two-validation/two-test
 software fixture and a tiny random checkpoint deliberately biased toward EOS.
 D, F and G each perform four update steps; all four variants produce predictions
 and metrics. Empty generated outputs and zero rewards in this smoke are expected.
@@ -43,6 +52,7 @@ To repeat the optional full CLI smoke (not collected by default pytest):
 
 ```bash
 python tests/run_tiny_cli_integration.py --work-dir /new/empty/test-directory
+python tests/run_tiny_cli_integration.py --work-dir /another/new/test-directory --annotation-scope full_grounding
 ```
 
 ## Environment and remaining validation

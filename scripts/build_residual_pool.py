@@ -21,6 +21,7 @@ from ts_grounder.event_metrics import (  # noqa: E402
 )
 from ts_grounder.utils import load_yaml  # noqa: E402
 from ts_grounder.control_protocol import fingerprint_checkpoint, json_sha256, record_fingerprint  # noqa: E402
+from ts_grounder.schema import GROUNDING_CONTRACT_VERSION  # noqa: E402
 from ts_grounder.supervision import (  # noqa: E402
     annotation_scope, validate_generation_budget, validate_prepared_record,
 )
@@ -494,6 +495,7 @@ def build_residual_pool(args: argparse.Namespace) -> dict[str, Any]:
         residual_record["unmatched_pred_indices"] = scored["unmatched_pred_indices"]
         residual_record["unmatched_gt_indices"] = scored["unmatched_gt_indices"]
         residual_record["residual_mining"] = {
+            "grounding_contract_version": GROUNDING_CONTRACT_VERSION,
             "model_path": args.model_path,
             "tau_match": float(args.tau_match),
             "tau_good": float(args.tau_good),
@@ -523,6 +525,7 @@ def build_residual_pool(args: argparse.Namespace) -> dict[str, Any]:
     summary["max_index"] = int(args.max_index)
     summary["prediction_schema"] = str(args.prediction_schema)
     summary["source_split"] = "train"
+    summary["grounding_contract_version"] = GROUNDING_CONTRACT_VERSION
     summary["input_sha256"] = input_sha256
     summary["checkpoint"] = provenance
     summary["checkpoint_fingerprint"] = provenance["sha256"]

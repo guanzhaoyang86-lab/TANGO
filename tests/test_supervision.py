@@ -20,6 +20,7 @@ from ts_grounder.supervision import (
 from ts_grounder.vlm_data import _record_from_sample, _record_from_qa_pair, build_vlm_sft_dataset
 from ts_grounder.vlm_eval import evaluate_predictions
 from ts_grounder.vlm_training import VisionChatCollator, generate_predictions, load_vlm_checkpoint
+from ts_grounder.schema import GROUNDING_CONTRACT_VERSION
 
 
 def make_sample(tmp_path, *, semantic=False, normal=False, many=False):
@@ -290,6 +291,7 @@ def test_matched_sft_real_hf_trainer_runs_exact_order_and_updates_weights(tmp_pa
     fingerprints = {record["id"]: record_fingerprint(record) for record in records}
     schedule = {
         "schema_version": 1, "selection": "residual", "num_epochs": 2,
+        "grounding_contract_version": GROUNDING_CONTRACT_VERSION,
         "prompts_per_epoch": 1, "total_prompt_exposures": 2,
         "epochs": [["sample-1"], ["sample-0"]],
         "sampling_without_replacement_within_epoch": True,

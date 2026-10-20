@@ -22,6 +22,7 @@ from ts_grounder.control_protocol import (
     json_sha256, load_prompt_schedule,
 )
 from ts_grounder.utils import load_yaml
+from ts_grounder.schema import GROUNDING_CONTRACT_VERSION
 from ts_grounder.vlm_eval import load_jsonl
 from ts_grounder.vlm_prompting import DEFAULT_SYSTEM_PROMPT, DEFAULT_USER_PROMPT
 
@@ -185,7 +186,8 @@ def run(args):
     if args.action != "prepare" and stage2 is None:
         raise ValueError("Supply --stage2-checkpoint; A never creates a substitute checkpoint")
     model_hash = fingerprint_checkpoint(stage2) if stage2 else None
-    identity = {"schema_version": 1, "seed": args.seed, "source_root": str(source), "source_split_sha256": source_hashes,
+    identity = {"schema_version": 2, "grounding_contract_version": GROUNDING_CONTRACT_VERSION,
+                "seed": args.seed, "source_root": str(source), "source_split_sha256": source_hashes,
                 "control_config": cfg, "prompts_per_epoch_override": args.prompts_per_epoch}
     receipt = run_root / "experiment.json"
     if receipt.exists():
@@ -244,6 +246,8 @@ def run(args):
     if "schedule" in actions:
         summary_path = mining.with_suffix(".summary.json")
         summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        if summary.get("grounding_contract_version") != GROUNDING_CONTRACT_VERSION:
+            raise ValueError("Residuals use an old output contract; remine/rescore training predictions in a fresh experiment")
         if summary.get("input_sha256") != file_sha256(cache / "train.jsonl") or summary.get("residual_sha256") != file_sha256(mining):
             raise ValueError("Mining summary does not match the current prepared input/output")
         observed_checkpoint = summary.get("checkpoint_fingerprint")
@@ -304,6 +308,7 @@ def run(args):
             final_model_hash = fingerprint_checkpoint(output / "model")
             write_new_json(run_root / f"{variant}_completed.json", {
                 "name": VARIANTS[variant], "stage2_sha256": model_hash,
+                "grounding_contract_version": GROUNDING_CONTRACT_VERSION,
                 "model_sha256": final_model_hash, "model_path": str(output / "model"),
                 "schedule_sha256": file_sha256(schedule), "prompt_exposures": sum(map(len, epochs)),
                 "same_prompt_exposure_not_equal_compute": True,
@@ -317,6 +322,8 @@ def run(args):
                 raise FileNotFoundError(checkpoint)
             if variant != "A":
                 completed = json.loads((run_root / f"{variant}_completed.json").read_text(encoding="utf-8"))
+                if completed.get("grounding_contract_version") != GROUNDING_CONTRACT_VERSION:
+                    raise ValueError(f"Variant {variant} was trained with an old output contract")
                 if completed.get("model_sha256") != fingerprint_checkpoint(checkpoint):
                     raise ValueError(f"Variant {variant} checkpoint changed after training")
                 schedule_path = schedules["random" if variant == "F" else "residual"]

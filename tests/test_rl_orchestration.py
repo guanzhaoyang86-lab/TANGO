@@ -17,6 +17,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from ts_grounder.control_protocol import file_sha256, fingerprint_checkpoint, load_prompt_schedule
 from ts_grounder.rl_train_grpo import _config_defaults_from_file, _training_plan, build_parser as rl_parser
 from ts_grounder.vlm_eval import load_jsonl
+from ts_grounder.schema import GROUNDING_CONTRACT_VERSION
 
 
 def test_all_control_launcher_wiring_and_matched_backend_settings(tmp_path, monkeypatch):
@@ -50,11 +51,13 @@ def test_all_control_launcher_wiring_and_matched_backend_settings(tmp_path, monk
             classes = ["false_negative", "false_negative", "boundary_error", "correct_abnormal"]
             residual = [{**row, "error_type": kind, "ground_truth": row["target"], "residual_mining": {
                 "source_split": "train", "input_sha256": file_sha256(source_file),
+                "grounding_contract_version": GROUNDING_CONTRACT_VERSION,
                 "checkpoint_fingerprint": fingerprint_checkpoint(stage2)}} for row, kind in zip(rows, classes)]
             output.parent.mkdir(parents=True, exist_ok=True)
             output.write_text("\n".join(json.dumps(row) for row in residual), encoding="utf-8")
             output.with_suffix(".summary.json").write_text(json.dumps({
                 "input_sha256": file_sha256(source_file), "residual_sha256": file_sha256(output),
+                "grounding_contract_version": GROUNDING_CONTRACT_VERSION,
                 "checkpoint_fingerprint": fingerprint_checkpoint(stage2)}), encoding="utf-8")
         elif phase.endswith("_training"):
             config_path = Path(command[command.index("--config") + 1])
@@ -102,3 +105,14 @@ def test_all_control_launcher_wiring_and_matched_backend_settings(tmp_path, monk
     assert d["training"]["lr_scheduler_type"] == "constant"
     assert d["training"]["max_grad_norm"] == 0
     assert not (run_root / "A_completed.json").exists()  # A must never be trained.
+    assert json.loads((run_root / "experiment.json").read_text())["grounding_contract_version"] == GROUNDING_CONTRACT_VERSION
+    assert json.loads((run_root / "G_completed.json").read_text())["grounding_contract_version"] == GROUNDING_CONTRACT_VERSION
+    # An old mining summary must not be silently reused under the corrected parser.
+    summary_path = run_root / "mining/residual_pool.summary.json"
+    old_summary = json.loads(summary_path.read_text())
+    old_summary.pop("grounding_contract_version")
+    summary_path.write_text(json.dumps(old_summary), encoding="utf-8")
+    args.action = "schedule"
+    import pytest
+    with pytest.raises(ValueError, match="old output contract"):
+        launcher.run(args)
